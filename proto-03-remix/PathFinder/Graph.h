@@ -46,8 +46,6 @@ namespace PathFinder
 		T grid[width][height] = {};
 		Graph()
 		{
-			TRACE("Hello " << 1);
-
 			for (auto i = 0; i < width; i++)
 			{
 				for (auto j = 0; j < height; j++)

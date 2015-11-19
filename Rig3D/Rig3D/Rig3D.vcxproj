@@ -47,14 +47,17 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)Rig3D\;$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)Rig3D\;$(ProjectDir);$(SolutionDir)\3rd-party\mono\include\mono-2.0\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(SolutionDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(SolutionDir)Debug\EventHandler.lib;$(SolutionDir)Debug\GraphicsMath.lib;d3d11.lib;d3dcompiler.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir);$(SolutionDir)\3rd-party\mono\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>$(SolutionDir)Debug\EventHandler.lib;$(SolutionDir)Debug\GraphicsMath.lib;d3d11.lib;d3dcompiler.lib;mono-2.0.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <Profile>true</Profile>
     </Link>
+    <PostBuildEvent>
+      <Command>xcopy /Y "$(SolutionDir)\3rd-party\mono\bin\mono-2.0.dll" "$(OutDir)"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
@@ -89,6 +92,7 @@
     <ClInclude Include="Graphics\MeshLibrary.h" />
     <ClInclude Include="Graphics\rig_graphics_api_conversions.h" />
     <ClInclude Include="Intersection.h" />
+    <ClInclude Include="MonoEngine.h" />
     <ClInclude Include="Parametric.h" />
     <ClInclude Include="rig_defines.h" />
     <ClInclude Include="SceneGraph.h" />
@@ -111,6 +115,7 @@
     <ClCompile Include="Graphics\Interface\IRenderer.cpp" />
     <ClCompile Include="Graphics\Interface\IScene.cpp" />
     <ClCompile Include="Graphics\Interface\IShader.cpp" />
+    <ClCompile Include="MonoEngine.cpp" />
     <ClCompile Include="Options.h" />
     <ClCompile Include="SceneGraph.cpp" />
     <ClCompile Include="TaskDispatch\TaskDispatcher.cpp" />

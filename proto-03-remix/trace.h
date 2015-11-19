@@ -13,7 +13,6 @@ extern std::function<void(const cliqCity::graphicsMath::Vector3&, const cliqCity
 class Trace
 {
 	std::stringstream ss;
-	char buff[128];
 public:
 	static Trace &GetTrace() { static Trace trace; return trace; }
 	Trace &operator << (int value) { ss << value; return *this; }
@@ -39,8 +38,8 @@ public:
 				break;
 			}
 
-			//OutputDebugString(str.c_str());
-			//OutputDebugString("\n");
+			OutputDebugStringA(str.c_str());
+			OutputDebugStringA("\n");
 		}
 
 		trace.ss.clear();
@@ -148,7 +147,7 @@ inline void __TraceSmallDiamond(const cliqCity::graphicsMath::Vector3& pos, cons
 #define TRACE_SMALL_CROSS(position, color)		__TraceSmallCross	(position, color)
 #define TRACE_SMALL_XCROSS(position, color)		__TraceSmallXCross	(position, color)
 
-#else
+//#else
 
 #define TRACE(message)
 #define TRACE_LINE(from, to, color)

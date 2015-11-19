@@ -19,6 +19,7 @@
 #include "Rig3D/Parametric.h"
 #include "TargetFollower.h"
 #include "Colors.h"
+#include "Rig3D/MonoEngine.h"
 
 #define PI					3.1415926535f
 #define UNITY_QUAD_RADIUS	0.85f
@@ -212,6 +213,7 @@ public:
 	// singletons
 	Input& mInput = Input::SharedInstance();
 	Grid& mGrid = Grid::SharedInstance();
+	MonoEngine& mEngine = MonoEngine::SharedInstance();
 
 	ID3D11ShaderResourceView* nullSRV[2] = { 0, 0 };
 
@@ -244,6 +246,9 @@ public:
 		mDevice        = mRenderer->GetDevice();
 
 		mRenderer->SetDelegate(this);
+		
+		mEngine.Initialize();
+
 		VOnResize();
 		
 		InitializeLevel();
@@ -255,6 +260,9 @@ public:
 		InitializePlayerShaders();
 		InitializeCamera();
 
+		// call c# script start method
+		mEngine.Start();
+		mEngine.player = &mPlayerTransform;
 		// TO DO: Make Initialize function (InitializeGraph)
 		/*graph = PathFinder::Graph<Node, 10, 10>();
 		graph.grid[4][8].weight = 100;
@@ -273,33 +281,40 @@ public:
 
 		auto target = mRobots[4];
 
-		auto start = mPlayer.mTransform->GetPosition(); //Vector3(10, 20, 0);
-		auto end = target.Transform.GetPosition();
+		//auto start = mPlayer.mTransform->GetPosition(); //Vector3(10, 20, 0);
+		//auto end = target.Transform.GetPosition();
 		//grid.GetPath(start, end);
 		
-		auto from = mGrid.GetNodeAt(start);
-		auto to = mGrid.GetNodeAt(end);
+		//auto from = mGrid.GetNodeAt(start);
+		//auto to = mGrid.GetNodeAt(end);
 			
-		auto result = mGrid.pathFinder.FindPath(to, from);
-		static TargetFollower follower(*mPlayer.mTransform, mAABBs, mAABBCount);
-		const vec3f zone{ 0, 0, 5 };
-		follower.MoveTowards(target.Transform);
+		//auto result = mGrid.pathFinder.FindPath(to, from);
+		//static TargetFollower follower(*mPlayer.mTransform, mAABBs, mAABBCount);
+		//const vec3f zone{ 0, 0, 5 };
+		//follower.MoveTowards(target.Transform);
 		
-		if (result.path.size() > 0)
-		{
-			auto it = result.path.begin();
-			auto p1 = **it;
-			for (++it; it != result.path.end(); ++it)
-			{
-				auto p2 = **it;
-				TraceLine(p1.position + zone, p2.position + zone, Colors::blue);
-				p1 = p2;
-			}
-		}
+		//if (result.path.size() > 0)
+		//{
+		//	auto it = result.path.begin();
+		//	auto p1 = **it;
+		//	for (++it; it != result.path.end(); ++it)
+		//	{
+		//		auto p2 = **it;
+		//		TraceLine(p1.position + zone, p2.position + zone, Colors::blue);
+		//		p1 = p2;
+		//	}
+		//}
 
 		
 		UpdateGrid();
+
+		if (mInput.GetKeyDown(KEYCODE_SPACE)) callCsharp = !callCsharp;
+
+		if (callCsharp)
+			mEngine.Update();
 	}
+
+	bool callCsharp;
 
 	void VRender() override
 	{
@@ -1336,36 +1351,36 @@ public:
 		// Player Movement
 		float mPlayerSpeed = 0.25f;
 
-		auto pos = mPlayer.mTransform->GetPosition();
-		if (input.GetKey(KEYCODE_LEFT))
-		{
-			pos.x -= mPlayerSpeed;
-		}
-		if (input.GetKey(KEYCODE_RIGHT))
-		{
-			pos.x += mPlayerSpeed;
-		}
-		if (input.GetKey(KEYCODE_UP))
-		{
-			pos.y += mPlayerSpeed;
-		}
-		if (input.GetKey(KEYCODE_DOWN))
-		{
-			pos.y -= mPlayerSpeed;
-		}
+		//auto pos = mPlayer.mTransform->GetPosition();
+		//if (input.GetKey(KEYCODE_LEFT))
+		//{
+		//	pos.x -= mPlayerSpeed;
+		//}
+		//if (input.GetKey(KEYCODE_RIGHT))
+		//{
+		//	pos.x += mPlayerSpeed;
+		//}
+		//if (input.GetKey(KEYCODE_UP))
+		//{
+		//	pos.y += mPlayerSpeed;
+		//}
+		//if (input.GetKey(KEYCODE_DOWN))
+		//{
+		//	pos.y -= mPlayerSpeed;
+		//}
 
-		BoxCollider aabb = { pos, mPlayer.mBoxCollider->halfSize };
+		//BoxCollider aabb = { pos, mPlayer.mBoxCollider->halfSize };
 
-		for (int i = 0; i < mWallCount; i++)
-		{
-			if (IntersectAABBAABB(aabb, mWallColliders[i]))
-			{
-				return;
-			}
-		}
+		//for (int i = 0; i < mWallCount; i++)
+		//{
+		//	if (IntersectAABBAABB(aabb, mWallColliders[i]))
+		//	{
+		//		return;
+		//	}
+		//}
 
-		mPlayer.mTransform->SetPosition(pos);
-		mPlayer.mBoxCollider->origin = pos;
+		////mPlayer.mTransform->SetPosition(pos);
+		//mPlayer.mBoxCollider->origin = pos;
 		UpdatePlayer();
 	}
 };

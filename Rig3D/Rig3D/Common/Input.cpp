@@ -100,6 +100,46 @@ bool Input::GetMouseButton(MouseButton button)
 
 #pragma endregion
 
+#pragma region Static Accessors
+
+bool Input::__GetKeyDown(KeyCode key)
+{
+	return SharedInstance().GetKeyDown(key);
+}
+
+
+bool Input::__GetKeyUp(KeyCode key)
+{
+	return SharedInstance().GetKeyUp(key);
+}
+
+
+bool Input::__GetKey(KeyCode key)
+{
+	return SharedInstance().GetKey(key);
+}
+
+
+bool Input::__GetMouseButtonDown(MouseButton button)
+{
+	return SharedInstance().GetMouseButtonDown(button);
+}
+
+
+bool Input::__GetMouseButtonUp(MouseButton button)
+{
+	return SharedInstance().GetMouseButtonUp(button);
+}
+
+
+bool Input::__GetMouseButton(MouseButton button)
+{
+	return SharedInstance().GetMouseButton(button);
+}
+
+
+#pragma endregion
+
 #pragma region Event Handler
 
 void Input::HandleEvent(const IEvent& iEvent)
