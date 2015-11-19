@@ -47,7 +47,7 @@ namespace Rig3D
 		inline void SetRotation(const float x, const float y, const float z);
 		inline void SetPosition(const float x, const float y, const float z);
 		inline void SetScale(const float x, const float y, const float z);
-
+		
 	private: 
 		mat4f	mWorldMatrix;
 		mat4f	mLocalMatrix;

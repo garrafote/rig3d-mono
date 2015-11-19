@@ -2,6 +2,7 @@
 #include <list>
 #include <unordered_map>
 #include "Graph.h"
+#include <Colors.h>
 
 namespace PathFinder
 {
@@ -28,9 +29,8 @@ namespace PathFinder
 		unordered_map<T*, CacheData<T>> cache;
 
 	public:
-		Graph<T, width, height> graph;
-		Fringe() {}
-		Fringe(Graph<T, width, height> _graph) : graph(_graph) {}
+		Graph<T, width, height>& graph;
+		Fringe(Graph<T, width, height>& _graph) : graph(_graph) {}
 		~Fringe() {}
 
 		SearchResult<T> FindPath(T* startNode, T* endNode)
@@ -66,18 +66,24 @@ namespace PathFinder
 						continue;
 					}
 
-					if (*node == *endNode)
+					if (node == endNode)
 					{
 						found = true;
-						endNode = node;
 						break;
 					}
 
 					auto connections = graph.GetNodeConnections(node);
+
 					for(Connection<T> conn : *connections)
 					{
 						T* connNode = conn.to;
 						auto connCost = nodeData.cost + conn.cost * connNode->weight;
+
+						// never go back to start node..
+						if (connNode == startNode)
+						{
+							continue;
+						}
 
 						auto connData = cache[connNode];
 						if (connData.parent != nullptr && connCost >= connData.cost)
@@ -98,9 +104,14 @@ namespace PathFinder
 						connData.parent = node;
 						connData.cost = connCost;
 
-						// do i need to reassign?
+						Node* n = reinterpret_cast<Node*>(connNode);
+						TRACE_SMALL_BOX(n->position, Colors::green);
+
+						
 						cache[connNode] = connData;
 					}
+
+					delete connections;
 
 					++nodeIt;
 					fringe.remove(node);

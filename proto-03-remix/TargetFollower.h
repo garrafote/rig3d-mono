@@ -3,17 +3,19 @@
 #include <Rig3D/Common/Transform.h>
 #include <RayCast.h>
 #include <Rig3D/Common/Timer.h>
+#include <functional>
+#include "Colors.h"
+#include "trace.h"
 
 #define RAD_TO_DEG 57.29578f
 #define DEG_TO_RAD 0.01745329f
 #define MOD(a, n) ((a) - (floorf((a) / (n)) * (n)))
-#include <functional>
-#include "Colors.h"
 
-static Vector3 gRepelOffset = { 0.66f, -0.6f, 0.0f };
+//static Vector3 gRepelOffset = { 0.66f, -0.6f, 0.0f };
+static Vector3 gRepelOffset = { 1.4f, -1.4f, 0.0f };
 
-static float gRepelFocus = 4.0f;
-static float gRepelCastDistance = 2.0f;
+static float gRepelFocus = 6.0f;
+static float gRepelCastDistance = 4.0f;
 static float gRepelIncrement = 0.2f;
 static float gRapelDecay = 0.1f;
 static float gMaxRepel = 1.0f;
@@ -22,9 +24,6 @@ static float gTurnRate = 50;
 static float gMoveSpeed = 20;
 
 using namespace PathFinder;
-
-
-
 
 namespace Rig3D
 {
@@ -44,8 +43,7 @@ namespace Rig3D
 		TargetFollower(Transform& transform, AABB<vec2f>* aabbs, int aabbCount);
 		~TargetFollower();
 
-		//, std::function<void(vec3f, vec3f, vec4f)>& DrawLine
-		void MoveTowards(Transform& target, std::function<void(vec3f, vec3f, void*)> DrawLine)
+		void MoveTowards(Transform& target)
 		{
 			auto targetPosition = target.GetPosition();
 			auto position = mTransform.GetPosition();
@@ -55,48 +53,58 @@ namespace Rig3D
 			RayCastHit<vec2f> hit;
 
 			mSearchResult = mGrid.GetPath(position, targetPosition);
-			for (auto node : mSearchResult.path)
+			if (mSearchResult.path.size() > 1)
 			{
-				auto distance = node->position - position;
-				auto direction = distance *(1 / magnitude(distance));
-
-				ray = { position, direction };
-				if (!RayCast(&hit, ray, mAABBs, mAABBCount))
+				for (auto node = mSearchResult.path.rbegin(); node != mSearchResult.path.rend(); ++node)
 				{
-					targetPosition = node->position;
-					break;
+					auto distance = (*node)->position - position;
+					auto mag = magnitude(distance);
+					auto direction = distance * (1 / mag);
+
+					ray = { position, direction };
+					if (!RayCast(&hit, ray, mAABBs, mAABBCount, mag))
+					{
+						auto test = node;
+						if (++test == mSearchResult.path.rend())
+						{
+							--node;
+						}
+
+						targetPosition = (*node)->position;
+
+						TRACE_LINE(position, targetPosition, Colors::cyan);
+						break;
+					}
 				}
 			}
 
-			auto currentAngle = mTransform.GetRollPitchYaw().z;
+			auto currentAngle = mTransform.GetRollPitchYaw().z * RAD_TO_DEG;
 				
 			auto targetDistance = targetPosition - position;
 			auto targetAngle = atan2f(-targetDistance.x, targetDistance.y) * RAD_TO_DEG;
 			
 			auto da = abs(MOD(targetAngle - currentAngle + 180.0f, 360.0f) - 180);
 
-			auto targetRotation = Quaternion::rollPitchYaw(0, targetAngle * DEG_TO_RAD, 0);
-			auto r = targetRotation.toEuler() * RAD_TO_DEG;
+			auto targetRotation = Quaternion::rollPitchYaw(targetAngle * DEG_TO_RAD, 0, 0);
 
 			Quaternion rotation;
 			RotateTowards(&rotation, mTransform.GetRotation(), targetRotation, gTurnRate * 5 * deltaTime);
-			//mTransform.SetRotation(rotation);
-			auto r1 = rotation.toEuler() * RAD_TO_DEG;
+			mTransform.SetRotation(rotation);
 
-			auto frontOffset = position + mTransform.TransformPoint(vec3f(0, 1, 0) * gRepelFocus);
-			auto rightOffset = position + mTransform.TransformPoint(gRepelOffset);
-			auto leftOffset  = position + mTransform.TransformPoint(vec3f(-gRepelOffset.x, gRepelOffset.y, 0));
+			auto frontOffset = mTransform.TransformPoint(vec3f(0, 1, 0) * gRepelFocus);
+			auto rightOffset = mTransform.TransformPoint(gRepelOffset);
+			auto leftOffset  = mTransform.TransformPoint(vec3f(-gRepelOffset.x, gRepelOffset.y, 0));
 
-			//DrawLine(rightOffset, rightOffset +  normalize(frontOffset - rightOffset) * gRepelCastDistance, Colors::blue);
-			ray = { rightOffset, frontOffset - rightOffset };
-			if (RayCast(&hit, ray, mAABBs, mAABBCount)) // i need cast distance here (repel cast distance)
+			TRACE_LINE(rightOffset, rightOffset +  normalize(frontOffset - rightOffset) * gRepelCastDistance, Colors::blue);
+			ray = { rightOffset, normalize(frontOffset - rightOffset) };
+			if (RayCast(&hit, ray, mAABBs, mAABBCount, gRepelCastDistance)) // i need cast distance here (repel cast distance)
 			{
 				mRepel = fmax(mRepel - gRepelIncrement, -gMaxRepel);
 			}
 
-			//DrawLine(leftOffset, leftOffset + normalize(frontOffset - leftOffset) * gRepelCastDistance, Colors::blue);
-			ray = { leftOffset, frontOffset - leftOffset };
-			if (RayCast(&hit, ray, mAABBs, mAABBCount)) // i need cast distance here (repel cast distance)
+			TRACE_LINE(leftOffset, leftOffset + normalize(frontOffset - leftOffset) * gRepelCastDistance, Colors::blue);
+			ray = { leftOffset, normalize(frontOffset - leftOffset) };
+			if (RayCast(&hit, ray, mAABBs, mAABBCount, gRepelCastDistance)) // i need cast distance here (repel cast distance)
 			{
 				mRepel = fmin(mRepel + gRepelIncrement, +gMaxRepel);
 			}
@@ -125,7 +133,7 @@ namespace Rig3D
 
 			// "forward"
 			//Debug.DrawLine(transform.position, transform.position + transform.up);
-			//Debug.DrawLine(transform.position, transform.position + transform.TransformDirection(moveDirection).normalized, Color.yellow);
+			TRACE_LINE(mTransform.GetPosition(), mTransform.GetPosition() + mTransform.GetUp() * 3 /*+ transform.TransformDirection(moveDirection).normalized*/, Colors::red);
 
 			/*if (GetComponent<Animator>())
 			{
@@ -139,8 +147,8 @@ namespace Rig3D
 			moveStep.y *= moveDirection.y;
 			moveStep.z *= moveDirection.z;
 */
-			TRACE(float(deltaTime));
-			//mTransform.SetPosition(position + moveStep * gMoveSpeed * .1f * deltaTime);
+			//TRACE(float(deltaTime));
+			mTransform.SetPosition(position + moveStep * gMoveSpeed * .1f * deltaTime);
 		}
 
 		static void RotateTowards(Quaternion* out, const Quaternion& from, const Quaternion& to, float maxDegreesDelta)

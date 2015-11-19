@@ -61,7 +61,6 @@ namespace Rig3D
 		void HandleEvent(const IEvent& iEvent) override;
 
 	public:
-		// don't look at me... I WAS FORCED!
 		ScreenPoint mousePosition;
 
 		static Input& SharedInstance();
@@ -72,6 +71,13 @@ namespace Rig3D
 		bool GetMouseButtonDown(MouseButton button);
 		bool GetMouseButtonUp(MouseButton button);
 		bool GetMouseButton(MouseButton button);
+
+		static bool __GetKeyDown(KeyCode key);
+		static bool __GetKeyUp(KeyCode key);
+		static bool __GetKey(KeyCode key);
+		static bool __GetMouseButtonDown(MouseButton button);
+		static bool __GetMouseButtonUp(MouseButton button);
+		static bool __GetMouseButton(MouseButton button);
 	};
 
 	#pragma region Mouse Buttons

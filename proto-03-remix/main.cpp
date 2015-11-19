@@ -19,27 +19,29 @@
 #include "Rig3D/Parametric.h"
 #include "TargetFollower.h"
 #include "Colors.h"
+#include "Rig3D/MonoEngine.h"
 
 #define PI					3.1415926535f
 #define UNITY_QUAD_RADIUS	0.85f
 
+#if defined _DEBUG
+
+std::function<void(const vec3f&, const vec3f&, const vec4f&)> __gTraceLine;
+void TraceLine(const vec3f& from, const vec3f& to, const vec4f& color)
+{
+	__gTraceLine(from, to, color);
+}
+
+static const int gLineTraceMaxCount = 12000;
+#else
+static const int gLineTraceMaxCount = 0;
+#endif
+
+static const int gLineTraceVertexCount = 2 * gLineTraceMaxCount;
+
 using namespace Rig3D;
 
 typedef cliqCity::memory::LinearAllocator LinearAllocator;
-
-//class Colors
-//{
-//public:
-//	static const vec4f black;
-//	static const vec4f white;
-//	static const vec4f red;
-//	static const vec4f green;
-//	static const vec4f blue;
-//	static const vec4f cyan;
-//	static const vec4f yellow;
-//	static const vec4f magenta;
-//};
-
 
 static const vec4f gWallColor = { 1.0f, 0.0f, 1.0f, 1.0f };
 static const vec4f gCircleColor = { 1.0f, 1.0f, 1.0f, 1.0f };
@@ -47,16 +49,13 @@ static const vec4f gPlayerColor = { 0.0f, 0.0f, 1.0f, 1.0f };
 static const int gCircleVertexCount = 13;
 static const int gCircleIndexCount = 36;	// Indices = (vertices - 1) * 3
 
-static const int gSceneMemorySize = 20480;
+// __gLineTraceVertexCount is set to 0 if _DEBUG is not defined
+static const int gSceneMemorySize = 20480 + (gLineTraceVertexCount * 8 * 4);
 static const int gMeshMemorySize = 1024;
-
-static const int gLineTraceMaxCount = 5000;
-static const int gLineTraceVertexCount = 2 * gLineTraceMaxCount;
 
 char gSceneMemory[gSceneMemorySize];
 char gStaticMeshMemory[gMeshMemorySize];
 char gDynamicMeshMemory[gMeshMemorySize];
-
 
 class Proto_03_Remix : public IScene, public virtual IRendererDelegate
 {
@@ -119,9 +118,11 @@ public:
 	vector<RobotInfo>				mRobots;
 
 	AABB<vec2f>*					mAABBs;
+	Sphere<vec3f>*					mLightColliders;
 
-	LineTraceVertex					mLineTraceVertices[gLineTraceVertexCount];
+	LineTraceVertex*				mLineTraceVertices;
 	int								mLineTraceDrawCount;
+	bool							mLineTraceOverflow;
 
 	mat4f*							mWallTransforms;
 	mat4f*							mBlockTransforms;
@@ -145,6 +146,7 @@ public:
 	IMesh*							mLightMesh;
 	IMesh*							mPlayerMesh;
 	IMesh*							mLineTraceMesh;
+	IMesh*							mGridMesh;
 
 	DX3D11Renderer*					mRenderer;
 
@@ -185,19 +187,20 @@ public:
 	ID3D11PixelShader*				mShadowCasterPixelShader;
 	ID3D11VertexShader*				mBillboardVertexShader;
 	ID3D11PixelShader*				mBillboardPixelShader;
-	ID3D11VertexShader*				mShadowVertexShader;
 	ID3D11PixelShader*				mShadowPixelShader;
+	ID3D11PixelShader*				mGridPixelShader;
+	ID3D11RenderTargetView*			mGridRTV;
+	ID3D11Texture2D*				mGridMap;
 	ID3D11SamplerState*				mSamplerState;
 	ID3D11BlendState*				mBlendStateShadowMask;
 	ID3D11BlendState*				mBlendStateShadowCalc;
 	ID3D11Buffer*					mPointShaderBuffer;
 
-	ID3D11ComputeShader*			mShadowGridComputeShader;
-	ID3D11Buffer*				mSrcDataGPUBuffer;
-	ID3D11ShaderResourceView*	mSrcDataGPUBufferView;
 
-	ID3D11Texture2D*			mDestTexture;
-	ID3D11ShaderResourceView*	mDestTextureView;
+	ID3D11ComputeShader*		mShadowGridComputeShader;
+	ID3D11ShaderResourceView*	mSrcDataGPUBufferView0;
+	ID3D11ShaderResourceView*	mSrcDataGPUBufferView1;
+
 	ID3D11Buffer*				mDestDataGPUBuffer;
 	ID3D11Buffer*				mDestDataGPUBufferCPURead;
 	ID3D11UnorderedAccessView*	mDestDataGPUBufferView;
@@ -209,7 +212,8 @@ public:
 
 	// singletons
 	Input& mInput = Input::SharedInstance();
-	Grid& mGrid = Grid::getInstance();
+	Grid& mGrid = Grid::SharedInstance();
+	MonoEngine& mEngine = MonoEngine::SharedInstance();
 
 	ID3D11ShaderResourceView* nullSRV[2] = { 0, 0 };
 
@@ -227,20 +231,28 @@ public:
 		mOptions.mFullScreen = false;
 		mStaticMeshLibrary.SetAllocator(&mStaticMeshAllocator);
 		mDynamicMeshLibrary.SetAllocator(&mDynamicMeshAllocator);
+
+#if defined _DEBUG
+		__gTraceLine = [this](const vec3f& from, const vec3f& to, const vec4f& color) { TraceLine(from, to, color); };
+#endif
 	}
 
 	~Proto_03_Remix() {}
 
 	void VInitialize() override
 	{
-		mRenderer = &DX3D11Renderer::SharedInstance();
+		mRenderer      = &DX3D11Renderer::SharedInstance();
 		mDeviceContext = mRenderer->GetDeviceContext();
-		mDevice = mRenderer->GetDevice();
+		mDevice        = mRenderer->GetDevice();
 
 		mRenderer->SetDelegate(this);
-		VOnResize();
+		
+		mEngine.Initialize();
 
+		VOnResize();
+		
 		InitializeLevel();
+		InitializeGrid();
 		InitializeGeometry();
 		InitializeLineTraceShaders();
 		InitializeWallShaders();
@@ -248,6 +260,9 @@ public:
 		InitializePlayerShaders();
 		InitializeCamera();
 
+		// call c# script start method
+		mEngine.Start();
+		mEngine.player = &mPlayerTransform;
 		// TO DO: Make Initialize function (InitializeGraph)
 		/*graph = PathFinder::Graph<Node, 10, 10>();
 		graph.grid[4][8].weight = 100;
@@ -260,65 +275,46 @@ public:
 
 	void VUpdate(double milliseconds) override
 	{
-		float mPlayerSpeed = 0.25f;
+		HandleInput(Input::SharedInstance());
+
 		bool moved = false;
 
-		auto start = mPlayer.mTransform->GetPosition(); //Vector3(10, 20, 0);
-		auto end = Vector3(-20, -20, 0);
+		auto target = mRobots[4];
+
+		//auto start = mPlayer.mTransform->GetPosition(); //Vector3(10, 20, 0);
+		//auto end = target.Transform.GetPosition();
 		//grid.GetPath(start, end);
 		
-		auto from = mGrid.GetNodeAt(start);
-		auto to = mGrid.GetNodeAt(end);
+		//auto from = mGrid.GetNodeAt(start);
+		//auto to = mGrid.GetNodeAt(end);
 			
-		auto result = mGrid.pathFinder.FindPath(&from, &to);
-		static TargetFollower follower(*mPlayer.mTransform, mAABBs, mAABBCount);
-		//follower.MoveTowards(mRobots[0].Transform, [this](vec3f f, vec3f t, vec4f c) { TraceLine(f, t, c); });
+		//auto result = mGrid.pathFinder.FindPath(to, from);
+		//static TargetFollower follower(*mPlayer.mTransform, mAABBs, mAABBCount);
+		//const vec3f zone{ 0, 0, 5 };
+		//follower.MoveTowards(target.Transform);
 		
-		if (result.path.size() > 0)
-		{
-			auto it = result.path.begin();
-			auto p1 = **it;
-			for (++it; it != result.path.end(); ++it)
-			{
-				auto p2 = **it;
-				TraceLine(p1.position, p2.position, Colors::blue);
-				p1 = p2;
-			}
-		}
+		//if (result.path.size() > 0)
+		//{
+		//	auto it = result.path.begin();
+		//	auto p1 = **it;
+		//	for (++it; it != result.path.end(); ++it)
+		//	{
+		//		auto p2 = **it;
+		//		TraceLine(p1.position + zone, p2.position + zone, Colors::blue);
+		//		p1 = p2;
+		//	}
+		//}
 
-		auto pos = mPlayer.mTransform->GetPosition();
-		if (mInput.GetKey(KEYCODE_LEFT))
-		{
-			pos.x -= mPlayerSpeed;
-		}
-		if (mInput.GetKey(KEYCODE_RIGHT))
-		{
-			pos.x += mPlayerSpeed;
-		}
-		if (mInput.GetKey(KEYCODE_UP))
-		{
-			pos.y += mPlayerSpeed;
-		}
-		if (mInput.GetKey(KEYCODE_DOWN))
-		{
-			pos.y -= mPlayerSpeed;
-		}
+		
+		UpdateGrid();
 
-		BoxCollider aabb = { pos, mPlayer.mBoxCollider->halfSize };
+		if (mInput.GetKeyDown(KEYCODE_SPACE)) callCsharp = !callCsharp;
 
-		for (int i = 0; i < mWallCount; i++)
-		{
-			if (IntersectAABBAABB(aabb, mWallColliders[i]))
-			{
-				return;
-			}
-		}
-
-		mPlayer.mTransform->SetPosition(pos);
-		mPlayer.mBoxCollider->origin = pos;
-		UpdatePlayer();
-		UpdatePlayer();
+		if (callCsharp)
+			mEngine.Update();
 	}
+
+	bool callCsharp;
 
 	void VRender() override
 	{
@@ -337,9 +333,11 @@ public:
 		RenderPlayer();
 		RenderLightCircles();
 		RenderRobots();
-		//RenderGrid();
+		RenderGrid();
 
 		RenderShadowMask();
+
+		RenderGridToBuffer();
 
 		// changes the primitive type to lines
 		RenderLineTrace();
@@ -351,6 +349,7 @@ public:
 		mCircleMesh->~IMesh();
 		mWallMesh->~IMesh();
 		mLineTraceMesh->~IMesh();
+		mGridMesh->~IMesh();
 
 		ReleaseMacro(mQuadInputLayout);
 		ReleaseMacro(mQuadVertexShader);
@@ -387,18 +386,17 @@ public:
 		ReleaseMacro(mBillboardPixelShader);
 		ReleaseMacro(mShadowCasterPixelShader);
 		ReleaseMacro(mShadowPixelShader);
-		ReleaseMacro(mShadowVertexShader);
+		ReleaseMacro(mGridPixelShader);
+		ReleaseMacro(mGridMap);
+		ReleaseMacro(mGridRTV);
 		ReleaseMacro(mBlendStateShadowMask);
 		ReleaseMacro(mBlendStateShadowCalc);
 		ReleaseMacro(mSamplerState);
 		ReleaseMacro(mPointShaderBuffer);
 
 		ReleaseMacro(mShadowGridComputeShader);
-		ReleaseMacro(mSrcDataGPUBuffer);
-		ReleaseMacro(mSrcDataGPUBufferView);
-		
-		ReleaseMacro(mDestTexture);
-		ReleaseMacro(mDestTextureView);
+		ReleaseMacro(mSrcDataGPUBufferView0);
+		ReleaseMacro(mSrcDataGPUBufferView1);
 		ReleaseMacro(mDestDataGPUBuffer);
 		ReleaseMacro(mDestDataGPUBufferCPURead);
 		ReleaseMacro(mDestDataGPUBufferView);
@@ -421,8 +419,11 @@ public:
 		ReleaseMacro(mDestDataGPUBuffer);
 		ReleaseMacro(mDestDataGPUBufferCPURead);
 		ReleaseMacro(mDestDataGPUBufferView);
-		ReleaseMacro(mSrcDataGPUBuffer);
-		ReleaseMacro(mSrcDataGPUBufferView);
+		ReleaseMacro(mSrcDataGPUBufferView0);
+		ReleaseMacro(mSrcDataGPUBufferView1);
+		ReleaseMacro(mGridMap);
+		ReleaseMacro(mGridRTV);
+
 
 		D3D11_TEXTURE2D_DESC shadowCastersTextureDesc;
 		shadowCastersTextureDesc.Width = mRenderer->GetWindowWidth();
@@ -440,9 +441,8 @@ public:
 		mDevice->CreateTexture2D(&shadowCastersTextureDesc, nullptr, &mShadowCastersMap);
 		mDevice->CreateTexture2D(&shadowCastersTextureDesc, nullptr, &mShadowsAMap);
 		mDevice->CreateTexture2D(&shadowCastersTextureDesc, nullptr, &mShadowsBMap);
-
-		shadowCastersTextureDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
 		mDevice->CreateTexture2D(&shadowCastersTextureDesc, nullptr, &mShadowsFinalMap);
+		mDevice->CreateTexture2D(&shadowCastersTextureDesc, nullptr, &mGridMap);
 
 
 		D3D11_RENDER_TARGET_VIEW_DESC shadowCastersRTVDesc;
@@ -454,6 +454,7 @@ public:
 		mRenderer->GetDevice()->CreateRenderTargetView(mShadowsAMap, &shadowCastersRTVDesc, &mShadowsARTV);
 		mRenderer->GetDevice()->CreateRenderTargetView(mShadowsBMap, &shadowCastersRTVDesc, &mShadowsBRTV);
 		mRenderer->GetDevice()->CreateRenderTargetView(mShadowsFinalMap, &shadowCastersRTVDesc, &mShadowsFinalRTV);
+		mRenderer->GetDevice()->CreateRenderTargetView(mGridMap, &shadowCastersRTVDesc, &mGridRTV);
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC shadowCastersSRVDesc;
 		shadowCastersSRVDesc.Format = shadowCastersTextureDesc.Format;
@@ -472,7 +473,7 @@ public:
 			descGPUBuffer.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
 			descGPUBuffer.ByteWidth = numSpheresX*numSpheresY * sizeof(int);
 			descGPUBuffer.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
-			descGPUBuffer.StructureByteStride = sizeof(int);	// We assume the output data is in the RGBA format, 8 bits per channel
+			descGPUBuffer.StructureByteStride = sizeof(int);
 
 			mDevice->CreateBuffer(&descGPUBuffer, NULL, &mDestDataGPUBuffer);
 
@@ -483,7 +484,7 @@ public:
 
 			D3D11_UNORDERED_ACCESS_VIEW_DESC descView;
 			ZeroMemory(&descView, sizeof(descView));
-			descView.Format = DXGI_FORMAT_UNKNOWN;      // Format must be must be DXGI_FORMAT_UNKNOWN, when creating a View of a Structured Buffer
+			descView.Format = DXGI_FORMAT_UNKNOWN;
 			descView.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
 			descView.Buffer.NumElements = numSpheresX*numSpheresY;
 
@@ -491,36 +492,15 @@ public:
 		}
 
 		{
-			D3D11_BUFFER_DESC descGPUBuffer;
-			ZeroMemory(&descGPUBuffer, sizeof(descGPUBuffer));
-			descGPUBuffer.BindFlags = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE;
-			descGPUBuffer.ByteWidth = numSpheresX*numSpheresY * sizeof(vec4f);
-			descGPUBuffer.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
-			descGPUBuffer.StructureByteStride = sizeof(vec4f);	// We assume the data is in the RGBA format, 8 bits per channel
-
-			vec4f points[numSpheresX*numSpheresY];
-			for (auto i = 0; i < numSpheresX; i++)
-				for (auto j = 0; j < numSpheresY; j++)
-					points[i*numSpheresY + j] = mGrid.getInstance().pathFinder.graph.grid[i][j].position;
-
-			D3D11_SUBRESOURCE_DATA InitData;
-			InitData.pSysMem = &points[0];
-			HRESULT h2 = mDevice->CreateBuffer(&descGPUBuffer, &InitData, &mSrcDataGPUBuffer);
-
-			// Now we create a view on the resource. DX11 requires you to send the data to shaders using a "shader view"
-			D3D11_BUFFER_DESC descBuf;
-			ZeroMemory(&descBuf, sizeof(descBuf));
-			mSrcDataGPUBuffer->GetDesc(&descBuf);
-
 			D3D11_SHADER_RESOURCE_VIEW_DESC descView;
 			ZeroMemory(&descView, sizeof(descView));
-			descView.ViewDimension = D3D11_SRV_DIMENSION_BUFFEREX;
-			descView.BufferEx.FirstElement = 0;
-
+			descView.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
 			descView.Format = DXGI_FORMAT_UNKNOWN;
-			descView.BufferEx.NumElements = descBuf.ByteWidth / descBuf.StructureByteStride;
+			descView.Texture2D.MipLevels = 1;
+			descView.Texture2D.MostDetailedMip = 0;
 
-			mDevice->CreateShaderResourceView(mSrcDataGPUBuffer, &descView, &mSrcDataGPUBufferView);
+			mDevice->CreateShaderResourceView(mShadowsFinalMap, &descView, &mSrcDataGPUBufferView0);
+			mDevice->CreateShaderResourceView(mGridMap, &descView, &mSrcDataGPUBufferView1);
 		}
 	}
 
@@ -607,33 +587,32 @@ public:
 			mDeviceContext->Draw(3, 0);
 			mDeviceContext->PSSetShaderResources(0, 1, nullSRV);
 			mDeviceContext->OMSetBlendState(nullptr, nullptr, ~0);
-
-			//Compute 
-			mDeviceContext->CSSetShader(mShadowGridComputeShader, NULL, 0);
-			mDeviceContext->CSSetShaderResources(0, 1, &mSrcDataGPUBufferView);
-			mDeviceContext->CSSetUnorderedAccessViews(0, 1, &mDestDataGPUBufferView, NULL);
-			mDeviceContext->Dispatch(26, 17, 1);
-			mDeviceContext->CSSetShader(NULL, NULL, 0);
-			
-			mDeviceContext->CopyResource(mDestDataGPUBufferCPURead, mDestDataGPUBuffer);
-			
-			D3D11_MAPPED_SUBRESOURCE mappedResource;
-			mDeviceContext->Map(mDestDataGPUBufferCPURead, 0, D3D11_MAP_READ, 0, &mappedResource);
-
-			int* ints = reinterpret_cast<int*>(mappedResource.pData);
-
-			auto g = mGrid.pathFinder.graph.grid;
-
-			for (int i = 0; i < numSpheresX; i++)
-			{
-				for (int j = 0; j < numSpheresY; j++)
-				{
-					g[i][j].hasLight = ints[i+j*numSpheresX] == 1;
-				}
-			}
-
-			mDeviceContext->Unmap(mDestDataGPUBufferCPURead, 0);
+			mDeviceContext->OMSetRenderTargets(1, mRenderer->GetRenderTargetView(), nullptr);
 		}
+
+		//Compute 
+		mDeviceContext->CSSetShader(mShadowGridComputeShader, NULL, 0);
+		mDeviceContext->CSSetShaderResources(0, 1, &mSrcDataGPUBufferView0);
+		mDeviceContext->CSSetShaderResources(1, 1, &mSrcDataGPUBufferView1);
+		mDeviceContext->CSSetUnorderedAccessViews(0, 1, &mDestDataGPUBufferView, NULL);
+		mDeviceContext->Dispatch(mRenderer->GetWindowWidth()/32, mRenderer->GetWindowHeight()/32, 1);
+		mDeviceContext->CSSetShader(NULL, NULL, 0);
+		mDeviceContext->CSSetShaderResources(0, 2, nullSRV);
+		mDeviceContext->CopyResource(mDestDataGPUBufferCPURead, mDestDataGPUBuffer);
+
+		//Map and update
+		D3D11_MAPPED_SUBRESOURCE mappedResource;
+		mDeviceContext->Map(mDestDataGPUBufferCPURead, 0, D3D11_MAP_READ, 0, &mappedResource);
+		int* ints = reinterpret_cast<int*>(mappedResource.pData);
+		auto g = mGrid.pathFinder.graph.grid;
+		for (int i = 0; i < numSpheresX; i++)
+		{
+			for (int j = 0; j < numSpheresY; j++)
+			{
+				g[i][j].hasLight = ints[i+j*numSpheresX] == 1;
+			}
+		}
+		mDeviceContext->Unmap(mDestDataGPUBufferCPURead, 0);
 	}
 
 	void RenderShadowMask() {
@@ -656,7 +635,7 @@ public:
 		const UINT offset = 0;
 		mDeviceContext->IASetInputLayout(mQuadInputLayout);
 		mDeviceContext->VSSetShader(mQuadVertexShader, NULL, 0);
-		mDeviceContext->PSSetShader(mShadowCasterPixelShader, NULL, 0);
+		mDeviceContext->PSSetShader(mQuadPixelShader, NULL, 0);
 
 		mQuadShaderData.Color = gPlayerColor;
 		mDeviceContext->UpdateSubresource(mQuadShaderBuffer, 0, NULL, &mQuadShaderData, 0, 0);
@@ -676,19 +655,12 @@ public:
 			const auto none = vec3f(-.5f, .5f, 0);
 			auto pos = robot.Transform.GetPosition();
 
-			// cross
-			TraceLine(pos + pone, pos - pone, Colors::red);
-			TraceLine(pos + none, pos - none, Colors::red);
-			
-			// box
-			TraceLine(pos + pone, pos + none, Colors::red);
-			TraceLine(pos - pone, pos - none, Colors::red);
-			TraceLine(pos + pone, pos - none, Colors::red);
-			TraceLine(pos - pone, pos + none, Colors::red);
+			TRACE_SMALL_DIAMOND(pos, Colors::red);
+			TRACE_SMALL_CROSS(pos, Colors::red);
 
 			for (int i = 1, len = robot.Waypoints.size(); i < len; i++)
 			{
-				TraceLine(robot.Waypoints[i - 1], robot.Waypoints[i], Colors::green);
+				TRACE_LINE(robot.Waypoints[i - 1], robot.Waypoints[i], Colors::yellow);
 			}
 		}
 	}
@@ -697,15 +669,12 @@ public:
 	{
 		for (int i = 0; i < numSpheresX; i++)
 		{
-			for (int j = 0; j < numSpheresY; j++) 
+			for (int j = 0; j < numSpheresY; j++)
 			{
-			const auto pone = vec3f(nodeRadius, nodeRadius, 0);
-			const auto none = vec3f(-nodeRadius, nodeRadius, 0);
-			auto pos = mGrid.pathFinder.graph.grid[i][j].position;
+				auto pos = mGrid.graph.grid[i][j].position;
+				auto hasLight = mGrid.graph.grid[i][j].hasLight;
 
-			TraceLine(pos + pone, pos - pone, Colors::magenta);
-			TraceLine(pos + none, pos - none, Colors::magenta);
-
+				TRACE_BOX(pos, hasLight ? Colors::cyan : Colors::magenta);
 			}
 		}
 	}
@@ -720,7 +689,7 @@ public:
 		mDeviceContext->VSSetShader(mLineTraceVertexShader, nullptr, 0);
 		mDeviceContext->PSSetShader(mLineTracePixelShader, nullptr, 0);
 
-		mDeviceContext->UpdateSubresource(static_cast<DX11Mesh*>(mLineTraceMesh)->mVertexBuffer, 0, nullptr, &mLineTraceVertices, 0, 0);
+		mDeviceContext->UpdateSubresource(static_cast<DX11Mesh*>(mLineTraceMesh)->mVertexBuffer, 0, nullptr, mLineTraceVertices, 0, 0);
 		mDeviceContext->UpdateSubresource(mLineTraceShaderBuffer, 0, nullptr, &mLineTraceShaderData, 0, 0);
 		mDeviceContext->VSSetConstantBuffers(0, 1, &mLineTraceShaderBuffer);
 
@@ -729,6 +698,26 @@ public:
 
 		// reset line trace count
 		mLineTraceDrawCount = 0;
+		mLineTraceOverflow = false;
+	}
+
+
+	void RenderGridToBuffer()
+	{
+		mRenderer->VSetPrimitiveType(GPU_PRIMITIVE_TYPE_POINT);
+
+		mDeviceContext->OMSetRenderTargets(1, &mGridRTV, nullptr);
+
+		mDeviceContext->IASetInputLayout(mLineTraceInputLayout);
+		mDeviceContext->VSSetShader(mLineTraceVertexShader, nullptr, 0);
+		mDeviceContext->PSSetShader(mGridPixelShader, nullptr, 0);
+
+		//mDeviceContext->UpdateSubresource(static_cast<DX11Mesh*>(mGridMesh)->mVertexBuffer, 0, nullptr, &mGridVertices, 0, 0);
+		mDeviceContext->UpdateSubresource(mLineTraceShaderBuffer, 0, nullptr, &mLineTraceShaderData, 0, 0);
+		mDeviceContext->VSSetConstantBuffers(0, 1, &mLineTraceShaderBuffer);
+
+		mRenderer->VBindMesh(mGridMesh);
+		mRenderer->VDrawIndexed(0, numSpheresX * numSpheresY);
 	}
 
 	void UpdatePlayer() {
@@ -740,6 +729,31 @@ public:
 		memcpy(mappedResource.pData, &playerWorldMatrix, sizeof(mat4f));
 		// Unlock the instance buffer.
 		mDeviceContext->Unmap(mPlayerInstanceBuffer, 0);
+	}
+
+	void UpdateGrid()
+	{
+		for (size_t x = 0; x < numSpheresX; x++)
+		{
+			for (size_t y = 0; y < numSpheresY; y++)
+			{
+				auto node = &mGrid.graph.grid[x][y];
+
+				//node->weight = node->hasLight ? 0 : FLT_MAX;
+
+				RayCastHit<vec3f> hit;
+				if (RayCast(&hit, { node->position, vec3f(0, 0, 1) }, mWallColliders, mWallCount))
+				{
+					node->weight = FLT_MAX;
+				}
+
+				if (node->weight > 1)
+				{
+					TRACE_BOX(node->position, Colors::magenta);
+				}
+			}
+		}
+
 	}
 
 	void UpdateRobotTransforms()
@@ -761,7 +775,7 @@ public:
 
 	void InitializeCamera()
 	{
-		float aspectRatio = (float)mOptions.mWindowWidth / mOptions.mWindowHeight;
+		float aspectRatio = static_cast<float>(mOptions.mWindowWidth) / mOptions.mWindowHeight;
 		float halfHeight = 33.5f;
 		float halfWidth = 33.5f * aspectRatio;
 		mProjectionMatrix = mat4f::normalizedOrthographicLH(-halfWidth, halfWidth, -halfHeight, halfHeight, 0.3f, 1000.0f).transpose();
@@ -787,6 +801,8 @@ public:
 		mBlockCount = levelReader.mBlocks.Position.size();
 		LoadTransforms(&mBlockTransforms, &levelReader.mBlocks.Position[0], &levelReader.mBlocks.Rotation[0], &levelReader.mBlocks.Scale[0], mBlockCount, 0);
 
+
+		// Note: We are allocating aabbs twice!!! Maybe we should allocate our data structures before filling them out with level data?
 		mAABBCount = mWallCount + mBlockCount;
 		mAABBs = reinterpret_cast<AABB<vec2f>*>(mSceneAllocator.Allocate(sizeof(AABB<vec2f>) * (mAABBCount), alignof(AABB<vec2f>), 0));
 		SetAABBs(levelReader.mWalls, mAABBs, 0);
@@ -794,7 +810,8 @@ public:
 
 		// Lights
 		mCircleCount = levelReader.mLights.size();
-		LoadTransforms(&mCircleTransforms, &levelReader.mLights[0], nullptr, nullptr, mCircleCount, 1);
+		LoadLights(&mLights, &mCircleTransforms, &mLightColliders, &levelReader.mLights[0], mCircleCount);
+	//	LoadTransforms(&mCircleTransforms, &levelReader.mLights[0], nullptr, nullptr, mCircleCount, 1);
 		mLightPos = levelReader.mLights;
 
 		mCircleColorWeights = (float*)mSceneAllocator.Allocate(sizeof(float)*mCircleCount, alignof(float), 0);
@@ -824,6 +841,11 @@ public:
 		mGoal.mTransform = &mGoalTransform;
 		mGoal.mTransform->SetPosition(levelReader.mGoalPos);
 		mGoal.mTransform->RotateYaw(PI);
+	}
+
+	void InitializeGrid()
+	{
+
 	}
 
 	void LoadTransforms(mat4f** transforms, vec3f* positions, vec3f* rotations, vec3f* scales, int size, int TransformType)
@@ -870,25 +892,20 @@ public:
 		}
 	}
 
-	void LoadDynamicSceneObjects(SceneObject** sceneObjects, Transform** transforms, BoxCollider** colliders, vec3f* positions, vec3f* rotations, vec3f* scales, int size)
+	void LoadLights(SceneObject** sceneObjects, mat4f** transforms, SphereCollider** colliders, vec3f* positions, int size)
 	{
 		// Allocate size SceneObjects
 		*sceneObjects = reinterpret_cast<SceneObject*>(mSceneAllocator.Allocate(sizeof(SceneObject) * size, alignof(SceneObject), 0));
-		*transforms = reinterpret_cast<Transform*>(mSceneAllocator.Allocate(sizeof(Transform) * size, alignof(Transform), 0));
-		*colliders = reinterpret_cast<BoxCollider*>(mSceneAllocator.Allocate(sizeof(BoxCollider) * size, alignof(BoxCollider), 0));
-
-		quatf yRotate = quatf::rollPitchYaw(0.0f, 0.0f, PI);
+		*transforms = reinterpret_cast<mat4f*>(mSceneAllocator.Allocate(sizeof(mat4f) * size, alignof(mat4f), 0));
+		*colliders = reinterpret_cast<SphereCollider*>(mSceneAllocator.Allocate(sizeof(SphereCollider) * size, alignof(SphereCollider), 0));
 
 		for (int i = 0; i < size; i++)
 		{
-			(*transforms)[i].SetPosition(positions[i]);
-			(*transforms)[i].SetRotation(yRotate);
-			(*transforms)[i].SetScale(scales[i]);
+			(*transforms)[i] = mat4f::translate(positions[i]).transpose();
+			(*colliders)[i] = SphereCollider({ positions[i], 1.0f });
 
-			(*colliders)[i] = BoxCollider({ positions[i], vec3f(UNITY_QUAD_RADIUS) * scales[i] });
-
-			(*sceneObjects)[i].mTransform = transforms[i];
-			(*sceneObjects)[i].mBoxCollider = colliders[i];
+			(*sceneObjects)[i].mWorldMatrix = transforms[i];
+			(*sceneObjects)[i].mSphereCollider = colliders[i];
 		}
 	}
 
@@ -903,6 +920,7 @@ public:
 
 	void InitializeGeometry()
 	{
+		InitializeGridMesh();
 		InitializeLineTraceMesh();
 		InitializeQuadMesh();
 		InitializeCircleMesh();
@@ -910,6 +928,8 @@ public:
 
 	void InitializeLineTraceMesh()
 	{
+		mLineTraceVertices = reinterpret_cast<LineTraceVertex*>(mSceneAllocator.Allocate(sizeof(LineTraceVertex) * gLineTraceVertexCount, sizeof(LineTraceVertex), 0));
+
 		uint16_t lineTraceIndices[gLineTraceVertexCount];
 		for (auto i = 0; i < gLineTraceVertexCount; i++)
 		{
@@ -917,8 +937,36 @@ public:
 		}
 
 		mStaticMeshLibrary.NewMesh(&mLineTraceMesh, mRenderer);
-		mRenderer->VSetDynamicMeshVertexBuffer(mLineTraceMesh, mLineTraceVertices, sizeof(LineTraceVertex) * gLineTraceVertexCount, sizeof(LineTraceVertex));
+		mRenderer->VSetMeshVertexBuffer(mLineTraceMesh, mLineTraceVertices, sizeof(LineTraceVertex) * gLineTraceVertexCount, sizeof(LineTraceVertex));
 		mRenderer->VSetDynamicMeshIndexBuffer(mLineTraceMesh, lineTraceIndices, gLineTraceVertexCount);
+	}
+
+	void InitializeGridMesh()
+	{
+		auto grid = mGrid.pathFinder.graph.grid;
+		const int gridCount = numSpheresX*numSpheresY;
+
+		LineTraceVertex vertices[gridCount];
+
+		for (auto i = 0; i < numSpheresX; i++)
+		{
+			for (auto j = 0; j < numSpheresY; j++)
+			{
+				vertices[i + j*numSpheresX].Position = grid[i][j].position;
+				vertices[i + j*numSpheresX].Color = grid[i][j].coord;
+				vertices[i + j*numSpheresX].Color.z = numSpheresX;
+			}
+		}
+
+		uint16_t indices[gridCount];
+		for (auto i = 0; i < gridCount; i++)
+		{
+			indices[i] = i;
+		}
+
+		mStaticMeshLibrary.NewMesh(&mGridMesh, mRenderer);
+		mRenderer->VSetMeshVertexBuffer(mGridMesh, vertices, sizeof(LineTraceVertex) * gridCount, sizeof(LineTraceVertex));
+		mRenderer->VSetDynamicMeshIndexBuffer(mGridMesh, indices, gridCount);
 	}
 
 	void InitializeQuadMesh()
@@ -1115,11 +1163,12 @@ public:
 		D3DReadFileToBlob(L"ShadowPixelShader.cso", &psBlob);
 		mDevice->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, &mShadowPixelShader);
 
-		D3DReadFileToBlob(L"ShadowVertexShader.cso", &psBlob);
-		mDevice->CreateVertexShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, &mShadowVertexShader);
-
 		D3DReadFileToBlob(L"ShadowCasterPixelShader.cso", &psBlob);
 		mDevice->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, &mShadowCasterPixelShader);
+
+		D3DReadFileToBlob(L"GridPixelShader.cso", &psBlob);
+		mDevice->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, &mGridPixelShader);
+
 
 		D3D11_SAMPLER_DESC samplerDesc;
 		ZeroMemory(&samplerDesc, sizeof(D3D11_SAMPLER_DESC));
@@ -1252,6 +1301,18 @@ public:
 
 	void TraceLine(const vec3f& from, const vec3f& to, const vec4f& color)
 	{
+		if (mLineTraceOverflow)
+		{
+			return;
+		}
+
+		if (mLineTraceDrawCount >= gLineTraceVertexCount - 1)
+		{
+			TRACE("[WARNING] Reached maximum number of traced lines. Increase __gLineTraceMaxCount to trace more lines.");
+			mLineTraceOverflow = true;
+			return;
+		}
+
 		auto index = mLineTraceDrawCount++;
 		mLineTraceVertices[index].Position = from;
 		mLineTraceVertices[index].Color = color;
@@ -1262,6 +1323,66 @@ public:
 	}
 
 #pragma endregion
+
+	void HandleInput(Input& input)
+	{
+		// Player Mouse
+
+		if (input.GetMouseButtonDown(MOUSEBUTTON_LEFT))
+		{
+			float x = (2.0f * input.mousePosition.x) / mRenderer->GetWindowWidth() - 1.0f;
+			float y = 1.0f - (2.0f * input.mousePosition.y) / mRenderer->GetWindowHeight();
+
+			mat4f toWorld = (mQuadShaderData.Projection * mQuadShaderData.View).inverse();
+			vec3f worldPos = vec4f(x, y, 0.0f, 1.0f) * toWorld;
+			vec3f worldDir = vec3f(0.0f, 0.0f, 1.0f);
+			worldPos.z = -30.0f;
+
+			Ray<vec3f> ray = { worldPos, worldDir };
+
+			RayCastHit<vec3f> hit;
+			if (RayCast(&hit, ray, mLightColliders, mCircleCount))
+			{
+				mCircleColorWeights[hit.index] = mCircleColorWeights[hit.index] > 0 ? 0 : 1;
+			}
+		}
+
+
+		// Player Movement
+		float mPlayerSpeed = 0.25f;
+
+		//auto pos = mPlayer.mTransform->GetPosition();
+		//if (input.GetKey(KEYCODE_LEFT))
+		//{
+		//	pos.x -= mPlayerSpeed;
+		//}
+		//if (input.GetKey(KEYCODE_RIGHT))
+		//{
+		//	pos.x += mPlayerSpeed;
+		//}
+		//if (input.GetKey(KEYCODE_UP))
+		//{
+		//	pos.y += mPlayerSpeed;
+		//}
+		//if (input.GetKey(KEYCODE_DOWN))
+		//{
+		//	pos.y -= mPlayerSpeed;
+		//}
+
+		//BoxCollider aabb = { pos, mPlayer.mBoxCollider->halfSize };
+
+		//for (int i = 0; i < mWallCount; i++)
+		//{
+		//	if (IntersectAABBAABB(aabb, mWallColliders[i]))
+		//	{
+		//		return;
+		//	}
+		//}
+
+		////mPlayer.mTransform->SetPosition(pos);
+		//mPlayer.mBoxCollider->origin = pos;
+		UpdatePlayer();
+	}
 };
 
 DECLARE_MAIN(Proto_03_Remix);

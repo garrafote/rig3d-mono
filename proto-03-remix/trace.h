@@ -5,11 +5,14 @@
 #include <string>
 #include <Windows.h>
 #include <debugapi.h>
+#include <functional>
+#include <GraphicsMath/Vector.hpp>
+
+extern std::function<void(const cliqCity::graphicsMath::Vector3&, const cliqCity::graphicsMath::Vector3&, const cliqCity::graphicsMath::Vector4&)> __gTraceLine;
 
 class Trace
 {
 	std::stringstream ss;
-	char buff[128];
 public:
 	static Trace &GetTrace() { static Trace trace; return trace; }
 	Trace &operator << (int value) { ss << value; return *this; }
@@ -35,8 +38,8 @@ public:
 				break;
 			}
 
-			OutputDebugString(str.c_str());
-			OutputDebugString("\n");
+			OutputDebugStringA(str.c_str());
+			OutputDebugStringA("\n");
 		}
 
 		trace.ss.clear();
@@ -45,8 +48,116 @@ public:
 	}
 };
 
-#define TRACE(message) Trace::GetTrace () << message << Trace::endl
+inline void __TraceBox(const cliqCity::graphicsMath::Vector3& pos, const cliqCity::graphicsMath::Vector4& color)
+{
+	const auto pone = cliqCity::graphicsMath::Vector3( 1.0f, 1.0f, 0);
+	const auto none = cliqCity::graphicsMath::Vector3(-1.0f, 1.0f, 0);
 
-#else
+	// box
+	__gTraceLine(pos + pone, pos + none, color);
+	__gTraceLine(pos - pone, pos - none, color);
+	__gTraceLine(pos + pone, pos - none, color);
+	__gTraceLine(pos - pone, pos + none, color);
+}
+
+inline void __TraceSmallBox(const cliqCity::graphicsMath::Vector3& pos, const cliqCity::graphicsMath::Vector4& color)
+{
+	const auto pone = cliqCity::graphicsMath::Vector3( .5f, .5f, 0);
+	const auto none = cliqCity::graphicsMath::Vector3(-.5f, .5f, 0);
+
+	// box
+	__gTraceLine(pos + pone, pos + none, color);
+	__gTraceLine(pos - pone, pos - none, color);
+	__gTraceLine(pos + pone, pos - none, color);
+	__gTraceLine(pos - pone, pos + none, color);
+}
+
+inline void __TraceXCross(const cliqCity::graphicsMath::Vector3& pos, const cliqCity::graphicsMath::Vector4& color)
+{
+	const auto pone = cliqCity::graphicsMath::Vector3( 1.0f, 1.0f, 0);
+	const auto none = cliqCity::graphicsMath::Vector3(-1.0f, 1.0f, 0);
+
+	// cross
+	__gTraceLine(pos + pone, pos - pone, color);
+	__gTraceLine(pos + none, pos - none, color);
+}
+
+inline void __TraceSmallXCross(const cliqCity::graphicsMath::Vector3& pos, const cliqCity::graphicsMath::Vector4& color)
+{
+	const auto pone = cliqCity::graphicsMath::Vector3( .5f, .5f, 0);
+	const auto none = cliqCity::graphicsMath::Vector3(-.5f, .5f, 0);
+
+	// cross
+	__gTraceLine(pos + pone, pos - pone, color);
+	__gTraceLine(pos + none, pos - none, color);
+}
+
+inline void __TraceCross(const cliqCity::graphicsMath::Vector3& pos, const cliqCity::graphicsMath::Vector4& color)
+{
+	const auto hone = cliqCity::graphicsMath::Vector3(1.0f, 0.0f, 0);
+	const auto vone = cliqCity::graphicsMath::Vector3(0.0f, 1.0f, 0);
+
+	// cross
+	__gTraceLine(pos + vone, pos - vone, color);
+	__gTraceLine(pos + hone, pos - hone, color);
+}
+
+inline void __TraceSmallCross(const cliqCity::graphicsMath::Vector3& pos, const cliqCity::graphicsMath::Vector4& color)
+{
+	const auto hone = cliqCity::graphicsMath::Vector3(.5f,   0, 0);
+	const auto vone = cliqCity::graphicsMath::Vector3(  0, .5f, 0);
+
+	// cross
+	__gTraceLine(pos + vone, pos - vone, color);
+	__gTraceLine(pos + hone, pos - hone, color);
+}
+
+inline void __TraceDiamond(const cliqCity::graphicsMath::Vector3& pos, const cliqCity::graphicsMath::Vector4& color)
+{
+	const auto hone = cliqCity::graphicsMath::Vector3(1.0f, 0.0f, 0);
+	const auto vone = cliqCity::graphicsMath::Vector3(0.0f, 1.0f, 0);
+
+	// diamond
+	__gTraceLine(pos + vone, pos + hone, color);
+	__gTraceLine(pos + hone, pos - vone, color);
+	__gTraceLine(pos - vone, pos - hone, color);
+	__gTraceLine(pos - hone, pos + vone, color);
+}
+
+inline void __TraceSmallDiamond(const cliqCity::graphicsMath::Vector3& pos, const cliqCity::graphicsMath::Vector4& color)
+{
+	const auto hone = cliqCity::graphicsMath::Vector3(.5f,   0, 0);
+	const auto vone = cliqCity::graphicsMath::Vector3(  0, .5f, 0);
+
+	// diamond
+	__gTraceLine(pos + vone, pos + hone, color);
+	__gTraceLine(pos + hone, pos - vone, color);
+	__gTraceLine(pos - vone, pos - hone, color);
+	__gTraceLine(pos - hone, pos + vone, color);
+}
+
+#define TRACE(message)							Trace::GetTrace () << message << Trace::endl
+#define TRACE_LINE(from, to, color)				__gTraceLine		(from, to, color)
+#define TRACE_BOX(position, color)				__TraceBox			(position, color)
+#define TRACE_DIAMOND(position, color)			__TraceDiamond		(position, color)
+#define TRACE_CROSS(position, color)			__TraceCross		(position, color)
+#define TRACE_XCROSS(position, color)			__TraceXCross		(position, color)
+#define TRACE_SMALL_BOX(position, color)		__TraceSmallBox		(position, color)
+#define TRACE_SMALL_DIAMOND(position, color)	__TraceSmallDiamond	(position, color)
+#define TRACE_SMALL_CROSS(position, color)		__TraceSmallCross	(position, color)
+#define TRACE_SMALL_XCROSS(position, color)		__TraceSmallXCross	(position, color)
+
+//#else
+
 #define TRACE(message)
+#define TRACE_LINE(from, to, color)
+#define TRACE_BOX(position, color)
+#define TRACE_DIAMOND(position, color)
+#define TRACE_CROSS(position, color)
+#define TRACE_XCROSS(position, color)
+#define TRACE_SMALL_BOX(position, color)
+#define TRACE_SMALL_DIAMOND(position, color)
+#define TRACE_SMALL_CROSS(position, color)
+#define TRACE_SMALL_XCROSS(position, color)
+
 #endif
