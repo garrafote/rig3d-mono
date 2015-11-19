@@ -33,7 +33,7 @@ MonoEngine::MonoEngine()
 
 MonoEngine::~MonoEngine()
 {
-	mono_free(mScene);
+	mono_free(mGame);
 	mono_jit_cleanup(mDomain);
 }
 
@@ -49,14 +49,14 @@ void MonoEngine::Initialize()
 	mGameAssembly = mono_domain_assembly_open(mDomain, "Rig3DGame.dll");
 	mGameImage = mono_assembly_get_image(mGameAssembly);
 
-	mTScene = mono_class_from_name(mGameImage, "Rig3DGame", "Game");
-	mScene = mono_object_new(mDomain, mTScene);
+	mGameType = mono_class_from_name(mGameImage, "Rig3DGame", "Game");
+	mGame = mono_object_new(mDomain, mGameType);
 
-	auto method = mono_class_get_method_from_name(mTScene, ".ctor", 0);
-	mono_runtime_invoke(method, mScene, nullptr, &mException);
+	auto method = mono_class_get_method_from_name(mGameType, ".ctor", 0);
+	mono_runtime_invoke(method, mGame, nullptr, &mException);
 
-	mStartMethod = mono_class_get_method_from_name(mTScene, "Start", 0);
-	mUpdateMethod = mono_class_get_method_from_name(mTScene, "Update", 0);
+	mStartMethod = mono_class_get_method_from_name(mGameType, "Start", 0);
+	mUpdateMethod = mono_class_get_method_from_name(mGameType, "Update", 0);
 
 	mono_add_internal_call("Rig3DEngine.Engine::__InternalCall__GetPlayer", __GetPlayer);
 	mono_add_internal_call("Rig3DEngine.Transform::__InternalCall__GetPosition", __Transform__GetPosition);
@@ -72,7 +72,7 @@ void MonoEngine::Initialize()
 
 void MonoEngine::Start()
 {
-	mono_runtime_invoke(mStartMethod, mScene, nullptr, &mException);
+	mono_runtime_invoke(mStartMethod, mGame, nullptr, &mException);
 
 	if (mException)
 	{
@@ -84,7 +84,7 @@ void MonoEngine::Start()
 
 void MonoEngine::Update()
 {
-	mono_runtime_invoke(mUpdateMethod, mScene, nullptr, &mException);
+	mono_runtime_invoke(mUpdateMethod, mGame, nullptr, &mException);
 
 	if (mException)
 	{
@@ -100,8 +100,8 @@ MonoObject* MonoEngine::GetPlayer()
 
 	// create new object and call its constructor
 	auto object = mono_object_new(mDomain, type);
-	auto ctor = mono_class_get_method_from_name(mTScene, ".ctor", 0);
-	mono_runtime_invoke(ctor, mScene, nullptr, &mException);
+	auto ctor = mono_class_get_method_from_name(mGameType, ".ctor", 0);
+	mono_runtime_invoke(ctor, mGame, nullptr, &mException);
 
 	auto property = mono_class_get_property_from_name(type, "ObjectId");
 	int id = (int)object->vtable;

@@ -3,10 +3,10 @@
 Game Engine Design and Development
 Fall 2015
 
-Gabriel Ortega
-Henrique Silva Chaltein de Almeida
-Lucas Vasconcelos
-Tiago Martines
+* Gabriel Ortega
+* Henrique Silva Chaltein de Almeida
+* Lucas Vasconcelos
+* Tiago Martines
 
 
 # Running the Samples
@@ -21,7 +21,7 @@ On this sample, the class Game defined in C# is hooked up to the main engine. Th
 * The blue square can be controlled by pressing the arrow keys.
 * Space reactivates and reactivates the C# hook.
 
-# Relevant code is located at:
+# Relevant code:
 
 ## C++
 
