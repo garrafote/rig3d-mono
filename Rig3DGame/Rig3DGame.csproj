@@ -4,11 +4,11 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{3576E7D1-872B-4F39-AD44-31473D32A934}</ProjectGuid>
+    <ProjectGuid>{1107BA33-AF5D-4200-8A19-D1774150AE14}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Rig3DEngine</RootNamespace>
-    <AssemblyName>Rig3DEngine</AssemblyName>
+    <RootNamespace>Rig3DGame</RootNamespace>
+    <AssemblyName>Rig3DGame</AssemblyName>
     <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
   </PropertyGroup>
@@ -20,7 +20,6 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
-    <UseVSHostingProcess>true</UseVSHostingProcess>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -41,13 +40,14 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Engine.cs" />
-    <Compile Include="KeyCode.cs" />
-    <Compile Include="MouseButton.cs" />
-    <Compile Include="Input.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Transform.cs" />
-    <Compile Include="Vector3.cs" />
+    <Compile Include="Game.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Rig3DEngine\Rig3DEngine.csproj">
+      <Project>{3576e7d1-872b-4f39-ad44-31473d32a934}</Project>
+      <Name>Rig3DEngine</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

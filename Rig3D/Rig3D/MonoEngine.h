@@ -14,12 +14,15 @@ namespace Rig3D
 	{
 	private:
 		MonoDomain* mDomain;
-		MonoAssembly* mAssembly;
-		MonoImage* mImage;
+		MonoAssembly* mEngineAssembly;
+		MonoImage* mEngineImage;
 
-		MonoClass* mTScene;
+		MonoAssembly* mGameAssembly;
+		MonoImage* mGameImage;
 
-		MonoObject* mScene;
+		MonoClass* mGameType;
+
+		MonoObject* mGame;
 		MonoObject* mException;
 
 		MonoMethod* mUpdateMethod;

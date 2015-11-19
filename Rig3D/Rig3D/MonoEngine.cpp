@@ -33,6 +33,7 @@ MonoEngine::MonoEngine()
 
 MonoEngine::~MonoEngine()
 {
+	mono_free(mScene);
 	mono_jit_cleanup(mDomain);
 }
 
@@ -42,10 +43,13 @@ void MonoEngine::Initialize()
 	mono_set_dirs("..\\3rd-party\\mono\\lib", "..\\3rd-party\\mono\\etc");
 	mono_config_parse(nullptr);
 	mDomain = mono_jit_init_version("Rig3DEngine", "v4.0.30319");
-	mAssembly = mono_domain_assembly_open(mDomain, "Rig3DEngine.dll");
-	mImage = mono_assembly_get_image(mAssembly);
+	mEngineAssembly = mono_domain_assembly_open(mDomain, "Rig3DEngine.dll");
+	mEngineImage = mono_assembly_get_image(mEngineAssembly);
 
-	mTScene = mono_class_from_name(mImage, "Rig3DEngine", "Scene");
+	mGameAssembly = mono_domain_assembly_open(mDomain, "Rig3DGame.dll");
+	mGameImage = mono_assembly_get_image(mGameAssembly);
+
+	mTScene = mono_class_from_name(mGameImage, "Rig3DGame", "Game");
 	mScene = mono_object_new(mDomain, mTScene);
 
 	auto method = mono_class_get_method_from_name(mTScene, ".ctor", 0);
@@ -64,19 +68,6 @@ void MonoEngine::Initialize()
 	mono_add_internal_call("Rig3DEngine.Input::__InternalCall__GetMouseButtonDown", Input::__GetMouseButtonDown);
 	mono_add_internal_call("Rig3DEngine.Input::__InternalCall__GetMouseButtonUp", Input::__GetMouseButtonUp);
 	mono_add_internal_call("Rig3DEngine.Input::__InternalCall__GetMouseButto", Input::__GetMouseButton);
-
-	// test
-	auto getNameMethod = mono_class_get_method_from_name(mTScene, "Hello", 1);
-	
-	void* args[1];
-	args[0] = mono_string_new(mono_domain_get(), "Giorgos");
-
-	auto ret = (MonoString*)mono_runtime_invoke(getNameMethod, mScene, args, &mException);
-	char* c = mono_string_to_utf8(ret);
-	
-
-	// free the memory allocated from mono_string_to_utf8 ()
-	mono_free(c);
 }
 
 void MonoEngine::Start()
@@ -105,7 +96,7 @@ void MonoEngine::Update()
 
 MonoObject* MonoEngine::GetPlayer()
 {
-	auto type = mono_class_from_name(mImage, "Rig3DEngine", "Transform");
+	auto type = mono_class_from_name(mEngineImage, "Rig3DEngine", "Transform");
 
 	// create new object and call its constructor
 	auto object = mono_object_new(mDomain, type);
