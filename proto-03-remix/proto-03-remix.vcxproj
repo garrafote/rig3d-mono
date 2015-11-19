@@ -90,7 +90,7 @@
       <Profile>true</Profile>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /Y $(SolutionDir)UnitySceneExport.json $(OutDir)UnitySceneExport.json</Command>
+      <Command>xcopy /Y $(SolutionDir)UnitySceneExport.json $(OutDir)</Command>
     </PostBuildEvent>
     <PreBuildEvent>
       <Command>
@@ -129,7 +129,7 @@
       </TreatOutputAsContent>
     </CustomBuildStep>
     <PostBuildEvent>
-      <Command>xcopy /Y $(SolutionDir)UnitySceneExport.json $(OutDir)UnitySceneExport.json</Command>
+      <Command>xcopy /Y $(SolutionDir)UnitySceneExport.json $(OutDir)</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
