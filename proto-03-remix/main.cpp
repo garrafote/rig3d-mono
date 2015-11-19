@@ -314,7 +314,7 @@ public:
 			mEngine.Update();
 	}
 
-	bool callCsharp;
+	bool callCsharp = true;
 
 	void VRender() override
 	{

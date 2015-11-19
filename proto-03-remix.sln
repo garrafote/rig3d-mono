@@ -5,6 +5,7 @@ VisualStudioVersion = 14.0.23107.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "proto-03-remix", "proto-03-remix\proto-03-remix.vcxproj", "{9CDF32CA-A3F4-45A2-B703-EC18792690EF}"
 	ProjectSection(ProjectDependencies) = postProject
+		{1107BA33-AF5D-4200-8A19-D1774150AE14} = {1107BA33-AF5D-4200-8A19-D1774150AE14}
 		{3576E7D1-872B-4F39-AD44-31473D32A934} = {3576E7D1-872B-4F39-AD44-31473D32A934}
 	EndProjectSection
 EndProject
@@ -21,6 +22,8 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "DirectXTK_Desktop_2015", "Rig3D\Rig3D\Graphics\DirectX11\DirectXTK\DirectXTK_Desktop_2015.vcxproj", "{E0B52AE7-E160-4D32-BF3F-910B785E5A8E}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Rig3DEngine", "Rig3DEngine\Rig3DEngine.csproj", "{3576E7D1-872B-4F39-AD44-31473D32A934}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Rig3DGame", "Rig3DGame\Rig3DGame.csproj", "{1107BA33-AF5D-4200-8A19-D1774150AE14}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -101,6 +104,18 @@ Global
 		{3576E7D1-872B-4F39-AD44-31473D32A934}.Release|x64.Build.0 = Release|Any CPU
 		{3576E7D1-872B-4F39-AD44-31473D32A934}.Release|x86.ActiveCfg = Release|Any CPU
 		{3576E7D1-872B-4F39-AD44-31473D32A934}.Release|x86.Build.0 = Release|Any CPU
+		{1107BA33-AF5D-4200-8A19-D1774150AE14}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1107BA33-AF5D-4200-8A19-D1774150AE14}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1107BA33-AF5D-4200-8A19-D1774150AE14}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{1107BA33-AF5D-4200-8A19-D1774150AE14}.Debug|x64.Build.0 = Debug|Any CPU
+		{1107BA33-AF5D-4200-8A19-D1774150AE14}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{1107BA33-AF5D-4200-8A19-D1774150AE14}.Debug|x86.Build.0 = Debug|Any CPU
+		{1107BA33-AF5D-4200-8A19-D1774150AE14}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1107BA33-AF5D-4200-8A19-D1774150AE14}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1107BA33-AF5D-4200-8A19-D1774150AE14}.Release|x64.ActiveCfg = Release|Any CPU
+		{1107BA33-AF5D-4200-8A19-D1774150AE14}.Release|x64.Build.0 = Release|Any CPU
+		{1107BA33-AF5D-4200-8A19-D1774150AE14}.Release|x86.ActiveCfg = Release|Any CPU
+		{1107BA33-AF5D-4200-8A19-D1774150AE14}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
